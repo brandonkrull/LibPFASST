@@ -410,7 +410,13 @@ contains
        if (pf%state%status /= PF_STATUS_CONVERGED) then
 
           fine_lev_p => pf%levels(pf%nlevels)
-          call fine_lev_p%ulevel%sweeper%sweep(pf, pf%nlevels, pf%state%t0, dt, fine_lev_p%nsweeps)
+          
+          ! decide between sweep and RK steps
+          if (pf%use_rk_stepper .eqv. .true.) then
+             call fine_lev_p%ulevel%stepper%do_n_steps(pf, pf%nlevels, pf%state%t0, dt, fine_lev_p%nsteps_rk)
+          else           
+             call fine_lev_p%ulevel%sweeper%sweep(pf,      pf%nlevels, pf%state%t0, dt, fine_lev_p%nsweeps)
+          end if
        end if
 
        !
@@ -551,7 +557,13 @@ contains
              call pf_recv(pf, lev_p, lev_p%index*10000+100*k+pf%state%iter, .true.)
           end if
 
-          call lev_p%ulevel%sweeper%sweep(pf, pf%nlevels, pf%state%t0, dt, lev_p%nsweeps)
+          !<  Decide between sweep and RK step
+          if (pf%use_rk_stepper .eqv. .true.) then
+             call lev_p%ulevel%stepper%do_n_steps(pf, pf%nlevels, pf%state%t0, dt, lev_p%nsteps_rk)
+          else           
+             call lev_p%ulevel%sweeper%sweep(pf,      pf%nlevels, pf%state%t0, dt, lev_p%nsweeps)
+          end if
+
           call pf_check_convergence_pipeline(pf, lev_p%residual, converged)
 
           if (pf%state%status .ne. PF_STATUS_CONVERGED) then
@@ -678,17 +690,27 @@ contains
     !
     level_index=1
     fine_lev_p => pf%levels(level_index)
-    if (pf%Pipeline_G) then
-       do j = 1, fine_lev_p%nsweeps
-          call pf_recv(pf, fine_lev_p, fine_lev_p%index*10000+iteration+j, .true.)
-          call fine_lev_p%ulevel%sweeper%sweep(pf, level_index, t0, dt,1)
-          call pf_send(pf, fine_lev_p, fine_lev_p%index*10000+iteration+j, .false.)
-       end do
-    else
+    
+
+    ! decide between sweep and rk stepper
+    if (pf%use_rk_stepper .eqv. .true.) then
        call pf_recv(pf, fine_lev_p, fine_lev_p%index*10000+iteration, .true.)
-       call fine_lev_p%ulevel%sweeper%sweep(pf, level_index, t0, dt, fine_lev_p%nsweeps)
+       call fine_lev_p%ulevel%stepper%do_n_steps(pf, level_index, t0, dt, fine_lev_p%nsteps_rk)
        call pf_send(pf, fine_lev_p, level_index*10000+iteration, .false.)
-    endif
+    else           
+       if (pf%Pipeline_G) then
+          do j = 1, fine_lev_p%nsweeps
+             call pf_recv(pf, fine_lev_p, fine_lev_p%index*10000+iteration+j, .true.)
+             call fine_lev_p%ulevel%sweeper%sweep(pf, level_index, t0, dt,1)
+             call pf_send(pf, fine_lev_p, fine_lev_p%index*10000+iteration+j, .false.)
+          end do
+       else
+          call pf_recv(pf, fine_lev_p, fine_lev_p%index*10000+iteration, .true.)
+          call fine_lev_p%ulevel%sweeper%sweep(pf, level_index, t0, dt, fine_lev_p%nsweeps)
+          call pf_send(pf, fine_lev_p, level_index*10000+iteration, .false.)
+       endif
+    end if
+
     !
     ! up  (coarse to fine)
     !
@@ -710,7 +732,11 @@ contains
           ! compute residual
           ! do while residual > tol and j < nswps
           ! assuming residual computed at end of sweep 
-          call fine_lev_p%ulevel%sweeper%sweep(pf, level_index, t0, dt, fine_lev_p%nsweeps)
+          if (pf%use_rk_stepper .eqv. .true.) then
+             call fine_lev_p%ulevel%stepper%do_n_steps(pf, level_index, t0, dt, fine_lev_p%nsteps_rk)
+          else           
+             call fine_lev_p%ulevel%sweeper%sweep(pf,      level_index, t0, dt, fine_lev_p%nsweeps)
+          end if
        end if
     end do
 

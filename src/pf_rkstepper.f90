@@ -16,60 +16,63 @@ module pf_mod_rkstepper
    contains
      procedure(pf_f_eval_p), deferred :: f_eval
      procedure(pf_f_comp_p), deferred :: f_comp
-     procedure :: do_N_steps    => ARK_Nsteps
-     procedure :: initialize => ARK_initialize
-     procedure :: destroy   => ARK_destroy
+     procedure :: do_n_steps  => ARK_do_n_steps
+     procedure :: initialize  => ARK_initialize
+     procedure :: destroy     => ARK_destroy
   end type pf_ARK_t
 
   interface
+
      subroutine pf_f_eval_p(this,y, t, level, f, piece)
        import pf_ARK_t, pf_encap_t, pfdp
-       class(pf_ARK_t),  intent(inout) :: this
+       class(pf_ARK_t),   intent(inout) :: this
        class(pf_encap_t), intent(in   ) :: y
        real(pfdp),        intent(in   ) :: t
-       integer,    intent(in   ) :: level
+       integer,           intent(in   ) :: level
        class(pf_encap_t), intent(inout) :: f
-       integer,    intent(in   ) :: piece
+       integer,           intent(in   ) :: piece
      end subroutine pf_f_eval_p
+
       subroutine pf_f_comp_p(this,y, t, dt, rhs, level, f, piece)
        import pf_ARK_t, pf_encap_t, pfdp
-       class(pf_ARK_t),  intent(inout) :: this
+       class(pf_ARK_t),   intent(inout) :: this
        class(pf_encap_t), intent(inout) :: y
        real(pfdp),        intent(in   ) :: t
        real(pfdp),        intent(in   ) :: dt
        class(pf_encap_t), intent(in   ) :: rhs
-       integer,    intent(in   ) :: level
+       integer,           intent(in   ) :: level
        class(pf_encap_t), intent(inout) :: f
-       integer,    intent(in   ) :: piece
+       integer,           intent(in   ) :: piece
      end subroutine pf_f_comp_p
+
   end interface
 
 contains
     !> Perform N step of ARK on level lev_index and set qend appropriately.
-    subroutine ARK_Nsteps(this, pf, level_index, t0, big_dt,nsteps)
+  subroutine ARK_do_n_steps(this, pf, level_index, t0, big_dt, nsteps_rk)
     use pf_mod_timer
     use pf_mod_hooks
 
-    class(pf_ARK_t), intent(inout) :: this
+    class(pf_ARK_t),   intent(inout)        :: this
     type(pf_pfasst_t), intent(inout),target :: pf
-    real(pfdp),        intent(in   ) :: t0             !  Time at start of time interval
-    real(pfdp),        intent(in   ) :: big_dt         !  Size of time interval to integrato on
-    integer,             intent(in)    :: level_index  !  Level of the index to step on
-    integer,             intent(in)    :: nsteps       !  Number of steps to use
+    real(pfdp),        intent(in   )        :: t0           !  Time at start of time interval
+    real(pfdp),        intent(in   )        :: big_dt       !  Size of time interval to integrato on
+    integer,           intent(in)           :: level_index  !  Level of the index to step on
+    integer,           intent(in)           :: nsteps_rk    !  Number of steps to use
 
     class(pf_level_t), pointer :: lev
 
-    integer     :: i, j,m,n  !  Loop counters
-    real(pfdp)  :: t,dt    !  size of each ARK step
+    integer     :: i, j, m, n  !  Loop counters
+    real(pfdp)  :: t,dt        !  size of each ARK step
 
     class(pf_encap_t), allocatable :: rhs   !  The accumulated right hand side for implicit solves
 
     lev => pf%levels(level_index)   !  Assign pointer to appropriate level
 
-    dt = big_dt/real(nsteps, pfdp)
+    dt = big_dt/real(nsteps_rk, pfdp)
 
 
-    do n=1,nsteps      !  Loop over time steps
+    do n=1,nsteps_rk      !  Loop over time steps
        do m=1,this%Nstages  !  Loop over stage values
           t = t + dt*this%cvec(m)
 
@@ -108,7 +111,7 @@ contains
     
     !  Assign final value to end of time step
     call lev%qend%copy(lev%Q(lev%nnodes))
-  end subroutine ARK_Nsteps
+  end subroutine ARK_do_n_steps
   
 
   subroutine ARK_initialize(this, lev)
