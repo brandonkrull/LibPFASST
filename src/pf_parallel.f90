@@ -545,6 +545,11 @@ contains
        converged = .FALSE.
        pf%state%status = PF_STATUS_ITERATING
 
+       if (pf%use_rk_stepper .eqv. .true. .and. pf%niters > 1) then
+          pf%niters = 1
+          print *, "Number of iterations redefined, now equal to 1"
+       end if
+
        call start_timer(pf, TITERATION)
        do j = 1, pf%niters
           call call_hooks(pf, -1, PF_PRE_ITERATION)
@@ -564,7 +569,11 @@ contains
              call lev_p%ulevel%sweeper%sweep(pf,      pf%nlevels, pf%state%t0, dt, lev_p%nsweeps)
           end if
 
-          call pf_check_convergence_pipeline(pf, lev_p%residual, converged)
+          if (pf%use_rk_stepper .eqv. .true.) then
+             converged = .false.
+          else
+             call pf_check_convergence_pipeline(pf, lev_p%residual, converged)
+          end if
 
           if (pf%state%status .ne. PF_STATUS_CONVERGED) then
              call pf_send(pf, lev_p, lev_p%index*10000+100*k+pf%state%iter, .false.)
