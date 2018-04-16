@@ -229,7 +229,7 @@ contains
   subroutine ndarray_eprint(this)
     class(ndarray), intent(inout) :: this
     !  Just print the first few values
-    print *, this%flatarray(1:10)
+    print *, this%flatarray(1:1)
   end subroutine ndarray_eprint
 
   ! ! Helpers

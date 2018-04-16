@@ -63,7 +63,7 @@ contains
 
     class(pf_level_t), pointer               :: lev          !  Pointer to level level_index
     class(pf_encap_t), allocatable           :: rhs          !  Accumulated right hand side for implicit solves
-    integer                                  :: i, j, m, n   !  Loop counters
+    integer                                  :: j, m, n   !  Loop counters
     real(pfdp)                               :: t, dt        !  Size of each ark step
 
     ! Assign pointer to appropriate level
@@ -72,48 +72,60 @@ contains
     ! Set the internal time step size based on the number of rk steps
     dt = big_dt/real(nsteps_rk, pfdp)
 
+    ! Allocate space for the right-hand side
+    call lev%ulevel%factory%create_single(rhs, lev%index, SDC_KIND_SOL_FEVAL, lev%nvars, lev%shape)
+
     ! Loop over time steps
     do n = 1, nsteps_rk      
 
+       ! Recompute the first explicit function value 
+       if (n == 1) then
+          call lev%Q(1)%copy(lev%q0)
+       else
+          call lev%Q(1)%copy(lev%Q(lev%nnodes))
+       end if
+
+       if (this%explicit) &
+            call this%f_eval(lev%Q(1), t0+dt*(n-1)+dt*this%cvec(1), lev%index, lev%F(1,1),1)
+       if (this%implicit) &
+            call lev%F(1,2)%setval(0.0_pfdp)
+     
        ! Loop over stage values
-       do m = 1, this%nstages  
+       do m = 1, this%nstages-1  
           
-          ! Increment time
-          t = t + dt*this%cvec(m)
+          ! Set current time
+          t = t0 + dt*(n-1) + dt*this%cvec(m+1)
 
           ! Initialize the right-hand size for each stage
-          call rhs%setval(0.0_pfdp)
+          call rhs%copy(lev%Q(1))
 
           do j = 1, m
-             
-             ! Add initial condition to rhs
-             call rhs%axpy(1.0_pfdp, lev%Q(1))
 
              ! Add explicit rhs
              if (this%explicit) &
-                  call rhs%axpy(dt*this%AmatE(m,j), lev%F(j,1))
-             
+                  call rhs%axpy(dt*this%AmatE(m+1,j), lev%F(j,1))
+
              ! Add implicit rhs
              if (this%implicit) &
-                  call rhs%axpy(dt*this%AmatI(m,j), lev%F(j,2))
+                  call rhs%axpy(dt*this%AmatI(m+1,j), lev%F(j,2))
 
-             ! Solve the implicit system
-             if (this%implicit) then
-                call this%f_comp(lev%Q(m+1), t, dt*this%AmatI(m,m+1), rhs, lev%index,lev%F(m+1,2), 2)
-             else
-                call lev%Q(m+1)%copy(rhs)
-             end if
-             
-             ! Reevaluate explicit rhs with the new solution
-             if (this%explicit) &
-                  call this%f_eval(lev%Q(m+1), t, lev%index, lev%F(m+1,1), 1)
+          end do
 
-          end  do
+          ! Solve the implicit system
+          if (this%implicit .and. this%AmatI(m+1,m+1) /= 0) then
+             call this%f_comp(lev%Q(m+1), t, dt*this%AmatI(m+1,m+1), rhs, lev%index,lev%F(m+1,2), 2)
+          else
+             call lev%Q(m+1)%copy(rhs)
+          end if
                     
+          ! Reevaluate explicit rhs with the new solution
+          if (this%explicit) &
+               call this%f_eval(lev%Q(m+1), t, lev%index, lev%F(m+1,1), 1)
+          
        end do  ! End loop over stage values
        
        ! Compute final value using quadrature rule
-       call lev%Q(lev%nnodes)%setval(0.0_pfdp)
+       call lev%Q(lev%nnodes)%copy(lev%Q(1))
 
        ! Loop over stage values one more time
        do j = 1, this%nstages
@@ -126,9 +138,9 @@ contains
           if (this%implicit) &
                call lev%Q(lev%nnodes)%axpy(dt*this%bvecI(j), lev%F(j,2))
 
-       end do
+       end do ! End loop over stage values
 
-    end do !  Loop over time steps: n
+    end do ! End Loop over time steps
     
     ! Assign final value to end of time step
     call lev%qend%copy(lev%Q(lev%nnodes))
@@ -141,7 +153,7 @@ contains
     class(pf_level_t), intent(inout) :: lev
 
     integer    :: nstages
-    real(pfdp) :: gamma, delta, TWO
+    real(pfdp) :: gamma, delta
 
     !  Ascher-Ruuth-Spiteri
     this%explicit = .true.
@@ -161,16 +173,21 @@ contains
     this%bvecE = 0.0_pfdp
     this%bvecI = 0.0_pfdp
     this%cvec  = 0.0_pfdp
-
+    
     gamma           = (TWO - sqrt(TWO))/TWO
-    delta           = -2*sqrt(TWO)/THREE
+    delta           = -TWO*sqrt(TWO)/THREE
+
     this%AmatE(2,1) = gamma
     this%AmatE(3,1) = delta
     this%AmatE(3,2) = ONE-delta
 
+    print *, this%AmatE
+
     this%AmatI(2,2) = gamma
     this%AmatI(3,2) = ONE-gamma
     this%AmatI(3,3) = gamma
+
+    print *, this%AmatI
 
     this%cvec       = (/ ZERO, gamma, ONE /)
     this%bvecE      = (/ ZERO, ONE-gamma, gamma /)

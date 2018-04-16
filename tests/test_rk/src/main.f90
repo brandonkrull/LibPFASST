@@ -26,7 +26,8 @@ contains
     type(pf_pfasst_t)             :: pf
     type(pf_comm_t)               :: comm
     type(ndarray), allocatable    :: q0
-    integer                       :: nvars(maxlevs), nnodes(maxlevs), l
+    type(ndarray), pointer        :: ndarray_obj
+    integer                       :: nvars(maxlevs), nnodes(maxlevs), nsteps, l
     double precision              :: dt
     class(ad_sweeper_t), pointer  :: ad_sweeper_ptr
 
@@ -34,15 +35,17 @@ contains
     ! initialize pfasst
     !
 
-    nvars  = [ 64 ]   ! number of dofs on the time/space levels
-    nnodes = [ 5 ]       ! number of sdc nodes on time/space levels
+    nvars  = [ 1 ]   ! number of dofs on the time/space levels
+    nnodes = [ 4 ]   ! number of sdc nodes on time/space levels
+    nsteps = 0
     dt     = 0.05_pfdp
 
+    
     call pf_mpi_create(comm, MPI_COMM_WORLD)
     call pf_pfasst_create(pf, comm, maxlevs)
 
     pf%qtype       = SDC_GAUSS_LOBATTO
-    pf%niters      = 40
+    pf%niters      = 3
     pf%abs_res_tol = 1.0D-12    
     pf%rel_res_tol = 1.0D-12
 
@@ -73,7 +76,6 @@ contains
        pf%levels(1)%nsweeps_pred = 2
     end if
 
-    call pf_mpi_setup(comm, pf,ierror) ! XXX: move this into pf_pfasst_setup
     call pf_pfasst_setup(pf)
 
     !
@@ -86,7 +88,13 @@ contains
     call pf_add_hook(pf, pf%nlevels, PF_POST_SWEEP, echo_error)
     call pf_add_hook(pf, -1,         PF_POST_SWEEP, echo_residual)
     
-    call pf_pfasst_run(pf, q0, dt, tend=0.d0, nsteps=2*comm%nproc)
+    nsteps = 2*comm%nproc
+    call pf_pfasst_run(pf, q0, dt, tend=0.d0, nsteps=nsteps)
+
+    ndarray_obj => cast_as_ndarray(pf%levels(pf%nlevels)%Q(nnodes(1)))
+    print *, ndarray_obj%flatarray
+    call exact(nsteps*dt, q0%flatarray)
+    print *, q0%flatarray
 
     deallocate(q0%flatarray)
     deallocate(q0%shape)
@@ -95,7 +103,6 @@ contains
     !
     ! cleanup
     !
-    call pf_mpi_destroy(comm)     ! XXX
     call pf_pfasst_destroy(pf)
 
   end subroutine test_rk

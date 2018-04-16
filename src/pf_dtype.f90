@@ -26,12 +26,12 @@ module pf_mod_dtype
 !  integer, parameter :: pfdp = c_long_double
   integer, parameter :: pfdp = c_double
 
-  real(pfdp), parameter :: ZERO  = 0.0_pfdp
-  real(pfdp), parameter :: ONE   = 1.0_pfdp
-  real(pfdp), parameter :: TWO   = 2.0_pfdp
+  real(pfdp), parameter :: ZERO   = 0.0_pfdp
+  real(pfdp), parameter :: ONE    = 1.0_pfdp
+  real(pfdp), parameter :: TWO    = 2.0_pfdp
   real(pfdp), parameter :: THREE  = 3.0_pfdp
-  real(pfdp), parameter :: HALF  = 0.5_pfdp
-
+  real(pfdp), parameter :: HALF   = 0.5_pfdp
+ 
   integer, parameter :: PF_MAX_HOOKS = 32
   !> Quadrature node types
   integer, parameter :: SDC_GAUSS_LOBATTO   = 1

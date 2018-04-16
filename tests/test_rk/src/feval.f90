@@ -58,21 +58,6 @@ contains
     end select
   end function as_ad_sweeper
 
-  subroutine setup(sweeper, nvars)
-    class(pf_sweeper_t), intent(inout) :: sweeper
-    integer,             intent(in   ) :: nvars
-
-    class(ad_sweeper_t), pointer :: this
-    integer     :: i
-    type(c_ptr) :: wk
-    real(pfdp)  :: kx
-
-    this => as_ad_sweeper(sweeper)
-
-    ! to be implemented
-
-  end subroutine setup
-
   subroutine destroy(this, lev)
     class(ad_sweeper_t), intent(inout) :: this
     class(pf_level_t), intent(inout)   :: lev
@@ -85,9 +70,16 @@ contains
   subroutine initial(q0)
     type(ndarray), intent(inout) :: q0
 
-    ! to be implemented
+    call exact(0.0_pfdp, q0%flatarray)
 
   end subroutine initial
+
+  subroutine exact(t, yex)
+    real(pfdp), intent(in)  :: t
+    real(pfdp), intent(out) :: yex(:)
+
+    yex(1) = dexp((a+d)*t)
+  end subroutine exact
 
   ! Sweeper functions
 
@@ -100,7 +92,17 @@ contains
     integer,             intent(in   ) :: level_index
     integer,             intent(in   ) :: piece    
 
-    ! to be implemented
+    real(pfdp),          pointer       :: yvec(:), fvec(:)
+    real(pfdp)                         :: val
+
+    yvec => array1(y)
+    fvec => array1(f)
+
+    if (piece == 1) then
+       fvec = a*yvec
+    else 
+       fvec = d*yvec
+    end if
 
   end subroutine ad_sweeper_f_eval
 
@@ -114,8 +116,20 @@ contains
     integer,             intent(in   ) :: level_index
     class(pf_encap_t),   intent(inout) :: f
     integer,             intent(in   ) :: piece
+
+    real(pfdp),          pointer       :: yvec(:), rhsvec(:), fvec(:)
+    real(pfdp)                         :: val
+
+    yvec   => array1(y)
+    rhsvec => array1(rhs)
+    fvec   => array1(f)
     
-    ! to be implemented
+    if (piece == 2) then
+       yvec = rhsvec / (1.0_pfdp - d*dtq)
+       fvec = (yvec - rhsvec) / dtq 
+    else 
+       stop("Error: Piece 1 is explicit")
+    end if
 
   end subroutine ad_sweeper_f_comp
 
@@ -130,7 +144,17 @@ contains
     integer,             intent(in   ) :: level_index
     integer,             intent(in   ) :: piece    
 
-    ! to be implemented
+    real(pfdp),          pointer       :: yvec(:), fvec(:)
+    real(pfdp)                         :: val
+
+    yvec => array1(y)
+    fvec => array1(f)
+
+    if (piece == 1) then
+       fvec = a*yvec
+    else 
+       fvec = d*yvec
+    end if
 
   end subroutine ad_stepper_f_eval
 
@@ -145,7 +169,19 @@ contains
     class(pf_encap_t),   intent(inout) :: f
     integer,             intent(in   ) :: piece
     
-    ! to be implemented
+    real(pfdp),          pointer       :: yvec(:), rhsvec(:), fvec(:)
+    real(pfdp)                         :: val
+
+    yvec   => array1(y)
+    rhsvec => array1(rhs)
+    fvec   => array1(f)
+    
+    if (piece == 2) then
+       yvec = rhsvec / (1.0_pfdp - d*dtq)
+       fvec = (yvec - rhsvec) / dtq
+    else 
+       stop("Error: Piece 1 is explicit")
+    end if
 
   end subroutine ad_stepper_f_comp
 
@@ -158,7 +194,7 @@ contains
     class(pf_encap_t), intent(inout) :: qF, qG
     real(pfdp),        intent(in   ) :: t
     
-    ! to be implemented 
+    print *, "The interpolate function is not implemented"
 
   end subroutine interpolate
 
@@ -169,7 +205,7 @@ contains
     class(pf_encap_t), intent(inout) :: qF, qG
     real(pfdp),        intent(in   ) :: t
 
-    ! to be implemented
+    print *, "The restrict function is not implemented"
 
   end subroutine restrict
 
