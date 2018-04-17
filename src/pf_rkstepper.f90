@@ -197,8 +197,42 @@ contains
       
        ! Third-order Kennedy-Carpenter
 
-       ! not implemented yet
+       nstages = 4
       
+       this%nstages = nstages
+       allocate(this%AmatE(nstages,nstages))  !  Explicit Butcher matrix
+       allocate(this%AmatI(nstages,nstages))  !  Implicit Butcher matrix
+       allocate(this%cvec(nstages))           !  stage times
+       allocate(this%bvecE(nstages))          !  quadrature weights on explicit
+       allocate(this%bvecI(nstages))          !  quadrature weights on implicit
+
+       this%AmatE = 0.0_pfdp
+       this%AmatI = 0.0_pfdp
+       this%bvecE = 0.0_pfdp
+       this%bvecI = 0.0_pfdp
+       this%cvec  = 0.0_pfdp
+
+       this%AmatE(2,1) =   1767732205903.0_pfdp  / 2027836641118.0_pfdp
+       this%AmatE(3,1) =   5535828885825.0_pfdp  / 10492691773637.0_pfdp
+       this%AmatE(3,2) =   788022342437.0_pfdp   / 10882634858940.0_pfdp
+       this%AmatE(4,1) =   6485989280629.0_pfdp  / 16251701735622.0_pfdp
+       this%AmatE(4,2) = - 4246266847089.0_pfdp  / 9704473918619.0_pfdp
+       this%AmatE(4,3) =   10755448449292.0_pfdp / 10357097424841.0_pfdp
+
+       this%AmatI(2,1) =   1767732205903.0_pfdp  / 4055673282236.0_pfdp
+       this%AmatI(2,2) =   1767732205903.0_pfdp  / 4055673282236.0_pfdp
+       this%AmatI(3,1) =   2746238789719.0_pfdp  / 10658868560708.0_pfdp
+       this%AmatI(3,2) = - 640167445237.0_pfdp   / 6845629431997.0_pfdp
+       this%AmatI(3,3) =   1767732205903.0_pfdp  / 4055673282236.0_pfdp
+       this%AmatI(4,1) =   1471266399579.0_pfdp  / 7840856788654.0_pfdp
+       this%AmatI(4,2) = - 4482444167858.0_pfdp  / 7529755066697.0_pfdp
+       this%AmatI(4,3) =   11266239266428.0_pfdp / 11593286722821.0_pfdp
+       this%AmatI(4,4) =   1767732205903.0_pfdp  / 4055673282236.0_pfdp
+
+       this%cvec       = (/ 0.0_pfdp, 1767732205903.0_pfdp / 2027836641118.0_pfdp, 3.0_pfdp / 5.0_pfdp, 1.0_pfdp /)
+       this%bvecE      = (/ 1471266399579.0_pfdp  / 7840856788654.0_pfdp,  - 4482444167858.0_pfdp / 7529755066697.0_pfdp,&
+                            11266239266428.0_pfdp / 11593286722821.0_pfdp,   1767732205903.0_pfdp / 4055673282236.0_pfdp /)
+       this%bvecI      = this%bvecE   
 
     else if (this%order == 4) then
 

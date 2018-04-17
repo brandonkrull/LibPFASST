@@ -36,7 +36,7 @@ contains
     !
 
     nvars  = [ 1 ]   ! number of dofs on the time/space levels
-    nnodes = [ 7 ]   ! number of sdc nodes on time/space levels
+    nnodes = [ 5 ]   ! number of sdc nodes on time/space levels
     nsteps = 0
     dt     = 0.05_pfdp
 
@@ -54,7 +54,7 @@ contains
 
     do l = 1, pf%nlevels
        pf%levels(l)%nsweeps   = 1
-       pf%levels(l)%nsteps_rk = 1
+       pf%levels(l)%nsteps_rk = 8
 
        pf%levels(l)%nvars  = nvars(maxlevs-pf%nlevels+l)
        pf%levels(l)%nnodes = nnodes(maxlevs-pf%nlevels+l)
@@ -67,7 +67,7 @@ contains
        !call setup(pf%levels(l)%ulevel%sweeper, pf%levels(l)%nvars)
 
        ! select the order of the stepper
-       pf%levels(l)%ulevel%stepper%order = 4
+       pf%levels(l)%ulevel%stepper%order = 3
 
        allocate(pf%levels(l)%shape(1))
        pf%levels(l)%shape(1) = pf%levels(l)%nvars
