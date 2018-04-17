@@ -92,6 +92,7 @@ module pf_mod_dtype
   !<  Defines the base stepper type
   type, abstract :: pf_stepper_t
      integer     :: npieces
+     integer     :: order
    contains
      procedure(pf_do_n_steps_p),           deferred :: do_n_steps
      procedure(pf_initialize_stepper_p),   deferred :: initialize

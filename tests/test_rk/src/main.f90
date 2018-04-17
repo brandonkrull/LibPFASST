@@ -36,7 +36,7 @@ contains
     !
 
     nvars  = [ 1 ]   ! number of dofs on the time/space levels
-    nnodes = [ 4 ]   ! number of sdc nodes on time/space levels
+    nnodes = [ 7 ]   ! number of sdc nodes on time/space levels
     nsteps = 0
     dt     = 0.05_pfdp
 
@@ -45,7 +45,7 @@ contains
     call pf_pfasst_create(pf, comm, maxlevs)
 
     pf%qtype       = SDC_GAUSS_LOBATTO
-    pf%niters      = 3
+    pf%niters      = 4
     pf%abs_res_tol = 1.0D-12    
     pf%rel_res_tol = 1.0D-12
 
@@ -65,6 +65,9 @@ contains
        allocate(ad_stepper_t::pf%levels(l)%ulevel%stepper)
 
        !call setup(pf%levels(l)%ulevel%sweeper, pf%levels(l)%nvars)
+
+       ! select the order of the stepper
+       pf%levels(l)%ulevel%stepper%order = 4
 
        allocate(pf%levels(l)%shape(1))
        pf%levels(l)%shape(1) = pf%levels(l)%nvars
