@@ -194,7 +194,8 @@ contains
     class(pf_encap_t), intent(inout) :: qF, qG
     real(pfdp),        intent(in   ) :: t
     
-    print *, "The interpolate function is not implemented"
+    ! just copy the solution to the fine level
+    call qF%copy(qG)
 
   end subroutine interpolate
 
@@ -205,7 +206,8 @@ contains
     class(pf_encap_t), intent(inout) :: qF, qG
     real(pfdp),        intent(in   ) :: t
 
-    print *, "The restrict function is not implemented"
+    ! just copy the solution to the coarse level
+    call qG%copy(qF)
 
   end subroutine restrict
 

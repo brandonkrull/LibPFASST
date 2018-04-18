@@ -21,13 +21,13 @@ contains
 
     implicit none
 
-    integer, parameter :: maxlevs = 1
+    integer, parameter :: maxlevs = 2
 
     type(pf_pfasst_t)             :: pf
     type(pf_comm_t)               :: comm
     type(ndarray), allocatable    :: q0
     type(ndarray), pointer        :: ndarray_obj
-    integer                       :: nvars(maxlevs), nnodes(maxlevs), nsteps, l
+    integer                       :: nvars(maxlevs), nnodes(maxlevs), nsteps, l, numprocs, mpi_stat
     double precision              :: dt
     class(ad_sweeper_t), pointer  :: ad_sweeper_ptr
 
@@ -35,26 +35,26 @@ contains
     ! initialize pfasst
     !
 
-    nvars  = [ 1 ]   ! number of dofs on the time/space levels
-    nnodes = [ 5 ]   ! number of sdc nodes on time/space levels
+    nvars  = [ 1, 1 ]   ! number of dofs on the time/space levels
+    nnodes = [ 4, 7 ]   ! number of sdc nodes on time/space levels
     nsteps = 0
     dt     = 0.05_pfdp
 
-    
     call pf_mpi_create(comm, MPI_COMM_WORLD)
     call pf_pfasst_create(pf, comm, maxlevs)
 
     pf%qtype       = SDC_GAUSS_LOBATTO
-    pf%niters      = 4
-    pf%abs_res_tol = 1.0D-12    
-    pf%rel_res_tol = 1.0D-12
+    pf%niters      = 1
+    pf%abs_res_tol = 0
+    pf%rel_res_tol = 0
+    pf%Pipeline_G  = .true.
 
     ! test rk stepper
     pf%use_rk_stepper = .true.
 
     do l = 1, pf%nlevels
        pf%levels(l)%nsweeps   = 1
-       pf%levels(l)%nsteps_rk = 8
+       pf%levels(l)%nsteps_rk = 1
 
        pf%levels(l)%nvars  = nvars(maxlevs-pf%nlevels+l)
        pf%levels(l)%nnodes = nnodes(maxlevs-pf%nlevels+l)
@@ -67,19 +67,44 @@ contains
        !call setup(pf%levels(l)%ulevel%sweeper, pf%levels(l)%nvars)
 
        ! select the order of the stepper
-       pf%levels(l)%ulevel%stepper%order = 3
+       if (l == pf%nlevels) then
+          pf%levels(l)%ulevel%stepper%order = 4
+       else
+          pf%levels(l)%ulevel%stepper%order = 2
+       end if
 
        allocate(pf%levels(l)%shape(1))
-       pf%levels(l)%shape(1) = pf%levels(l)%nvars
-
+       pf%levels(l)%shape(1) = pf%levels(l)%nvars       
     end do
 
-    if (pf%nlevels > 1) then
-       pf%levels(1)%nsweeps      = 2 
-       pf%levels(1)%nsweeps_pred = 2
-    end if
 
     call pf_pfasst_setup(pf)
+
+    do l = 1, pf%nlevels
+       
+       if (pf%nlevels == 1) then
+          pf%levels(l)%nsweeps            = 1
+          pf%levels(l)%nsweeps_pred       = 1   
+          pf%levels(l)%nsteps_pred        = 1
+       else
+          if (l > 1) then
+
+             pf%levels(l)%nsweeps         = 1             
+             pf%levels(l)%nsweeps_pred    = 1
+             pf%levels(l)%nsteps_pred     = 1
+          else
+             pf%levels(l)%nsweeps         = 1
+             if (comm%nproc .eq. 1) then 
+                pf%levels(l)%nsweeps_pred = 0
+                pf%levels(l)%nsteps_pred  = 0
+             else
+                pf%levels(l)%nsweeps_pred = 1
+                pf%levels(l)%nsteps_pred  = 1
+             end if
+          end if
+       end if
+      
+    end do
 
     !
     ! compute initial condition, add hooks, run
@@ -91,13 +116,19 @@ contains
     call pf_add_hook(pf, pf%nlevels, PF_POST_SWEEP, echo_error)
     call pf_add_hook(pf, -1,         PF_POST_SWEEP, echo_residual)
     
-    nsteps = 2*comm%nproc
+    call MPI_BARRIER(MPI_COMM_WORLD,mpi_stat)
+
+    nsteps = comm%nproc
     call pf_pfasst_run(pf, q0, dt, tend=0.d0, nsteps=nsteps)
 
-    ndarray_obj => cast_as_ndarray(pf%levels(pf%nlevels)%Q(nnodes(1)))
-    print *, ndarray_obj%flatarray
-    call exact(nsteps*dt, q0%flatarray)
-    print *, q0%flatarray
+    call MPI_BARRIER(MPI_COMM_WORLD,mpi_stat)
+
+    if (pf%rank == comm%nproc-1) then
+       ndarray_obj => cast_as_ndarray(pf%levels(pf%nlevels)%Q(nnodes(maxlevs)))
+       print *, 'final = ', ndarray_obj%flatarray
+       call exact(nsteps*dt, q0%flatarray)
+       print *, 'final = ', q0%flatarray
+    end if
 
     deallocate(q0%flatarray)
     deallocate(q0%shape)

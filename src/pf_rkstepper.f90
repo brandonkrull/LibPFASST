@@ -85,6 +85,9 @@ contains
           call lev%Q(1)%copy(lev%Q(lev%nnodes))
        end if
 
+       if (level_index == pf%nlevels) &
+            call lev%Q(1)%eprint()
+
        ! this assumes that cvec(1) == 0 
        if (this%explicit) &
             call this%f_eval(lev%Q(1), t0+dt*(n-1)+dt*this%cvec(1), lev%index, lev%F(1,1),1)
@@ -300,7 +303,7 @@ contains
        stop "ark_initialize: This RK order is not supported"
     end if
 
-    if (lev%nnodes /= this%nstages + 1)  &
+    if (lev%nnodes < this%nstages + 1)  &
          stop "ark_initialize: With RK, lev%nnodes should be equal to rkstepper%nstages + 1"
 
   end subroutine ark_initialize

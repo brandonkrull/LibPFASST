@@ -136,6 +136,7 @@ module pf_mod_dtype
      integer  :: nvars        = -1   !< number of variables (dofs)
      integer  :: nnodes       = -1   !< number of sdc nodes
      integer  :: nsteps_rk    = -1   !< number of rk steps to perform
+     integer  :: nsteps_pred  = -1   !< number of times do_n_steps is called in predictor
      integer  :: nsweeps      =  1   !< number of sdc sweeps to perform
      integer  :: nsweeps_pred =  1   !< number of sdc sweeps to perform (predictor)
      logical     :: Finterp = .false.   !< interpolate functions instead of solutions
