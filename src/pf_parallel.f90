@@ -595,7 +595,7 @@ contains
              
              fine_lev_p => pf%levels(pf%nlevels)
              call pf_send(pf, fine_lev_p, fine_lev_p%index*10000+k, .false.)
-             
+
              if (pf%nlevels > 1) then
                 coarse_lev_p => pf%levels(pf%nlevels-1)
                 call restrict_time_space_fas(pf, pf%state%t0, dt, pf%nlevels)
@@ -703,7 +703,6 @@ contains
        ! predictor, if requested or we are starting new bloc
        if (pf%state%status == PF_STATUS_PREDICTOR) then
           call pf_parareal_predictor(pf, pf%state%t0, dt)
-          print *, pf%rank, ' is done with the predictor'
        end if
 
        !
@@ -720,8 +719,6 @@ contains
           
           ! decide between sweep and RK steps
           call fine_lev_p%ulevel%stepper%do_n_steps(pf, pf%nlevels, pf%state%t0, dt, fine_lev_p%nsteps_rk)
-
-          print *, pf%rank, ' is done with the ARK step'
 
        end if
 
@@ -743,9 +740,6 @@ contains
              
              fine_lev_p => pf%levels(pf%nlevels)
              call pf_send(pf, fine_lev_p, fine_lev_p%index*10000+k, .false.)
-             print *, pf%rank, ' is just sent the fine initial condition'
-             call fine_lev_p%qend%eprint()
-             
 
              if (pf%nlevels > 1) then
                 coarse_lev_p => pf%levels(pf%nlevels-1)
@@ -757,8 +751,6 @@ contains
           
           call pf_parareal_v_cycle(pf, k, pf%state%t0, dt)
           
-          print *, pf%rank, ' is done with the v-cycle'
-
           call call_hooks(pf, -1, PF_POST_ITERATION)
           call end_timer(pf, TITERATION)
        end if
@@ -1074,6 +1066,7 @@ contains
           ! needs the same increment that Q(1) got, but applied to the
           ! new fine initial condition
           call interpolate_q0(pf,fine_lev_p, coarse_lev_p)
+
        end if
 
        if (level_index < pf%nlevels) then
@@ -1135,14 +1128,16 @@ contains
       coarse_lev_p => pf%levels(level_index-1)
       call interpolate_time_space(pf, t0, dt, level_index,coarse_lev_p%Finterp)
       call pf_recv(pf, fine_lev_p, level_index*10000+iteration, .false.)
-      print *, pf%rank, ' is just received the fine initial condition'
-      call fine_lev_p%q0%eprint()
 
        if (pf%rank /= 0) then
           ! interpolate increment to q0 -- the fine initial condition
           ! needs the same increment that Q(1) got, but applied to the
           ! new fine initial condition
-          call interpolate_q0(pf,fine_lev_p, coarse_lev_p)
+
+          ! do not call interpolate_q0 with the rk_stepper !
+          ! this would replace q0 with the interpolated coarse initial condition
+          !call interpolate_q0(pf,fine_lev_p, coarse_lev_p)
+
        end if
 
        if (level_index < pf%nlevels) then

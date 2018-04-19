@@ -44,10 +44,10 @@ contains
     call pf_pfasst_create(pf, comm, maxlevs)
 
     pf%qtype       = SDC_GAUSS_LOBATTO
-    pf%niters      = 1
+    pf%niters      = 8
     pf%abs_res_tol = 0
     pf%rel_res_tol = 0
-    pf%Pipeline_G  = .true.
+    pf%Pipeline_G  = .false.
 
     ! test rk stepper
     pf%use_rk_stepper = .true.
@@ -124,7 +124,7 @@ contains
     call MPI_BARRIER(MPI_COMM_WORLD,mpi_stat)
 
     if (pf%rank == comm%nproc-1) then
-       ndarray_obj => cast_as_ndarray(pf%levels(pf%nlevels)%Q(nnodes(maxlevs)))
+       ndarray_obj => cast_as_ndarray(pf%levels(pf%nlevels)%qend)
        print *, 'final = ', ndarray_obj%flatarray
        call exact(nsteps*dt, q0%flatarray)
        print *, 'final = ', q0%flatarray
