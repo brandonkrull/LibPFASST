@@ -21,7 +21,7 @@ contains
 
     implicit none
 
-    integer, parameter :: maxlevs = 2
+    integer, parameter :: maxlevs = 1
 
     type(pf_pfasst_t)             :: pf
     type(pf_comm_t)               :: comm
@@ -35,8 +35,8 @@ contains
     ! initialize pfasst
     !
 
-    nvars  = [ 1, 1 ]   ! number of dofs on the time/space levels
-    nnodes = [ 4, 7 ]   ! number of sdc nodes on time/space levels
+    nvars  = [ 1 ]   ! number of dofs on the time/space levels
+    nnodes = [ 7 ]   ! number of sdc nodes on time/space levels
     nsteps = 0
     dt     = 0.05_pfdp
 
@@ -44,7 +44,7 @@ contains
     call pf_pfasst_create(pf, comm, maxlevs)
 
     pf%qtype       = SDC_GAUSS_LOBATTO
-    pf%niters      = 8
+    pf%niters      = 20
     pf%abs_res_tol = 0
     pf%rel_res_tol = 0
     pf%Pipeline_G  = .false.
@@ -54,7 +54,7 @@ contains
 
     do l = 1, pf%nlevels
        pf%levels(l)%nsweeps   = 1
-       pf%levels(l)%nsteps_rk = 1
+       pf%levels(l)%nsteps_rk = 1000
 
        pf%levels(l)%nvars  = nvars(maxlevs-pf%nlevels+l)
        pf%levels(l)%nnodes = nnodes(maxlevs-pf%nlevels+l)
@@ -129,6 +129,14 @@ contains
        call exact(nsteps*dt, q0%flatarray)
        print *, 'final = ', q0%flatarray
     end if
+
+    if (pf%rank == comm%nproc-1) then
+       ndarray_obj => cast_as_ndarray(pf%levels(pf%nlevels)%Q(pf%levels(pf%nlevels)%nnodes))
+       print *, 'final = ', ndarray_obj%flatarray
+       call exact(nsteps*dt, q0%flatarray)
+       print *, 'final = ', q0%flatarray
+    end if
+
 
     deallocate(q0%flatarray)
     deallocate(q0%shape)

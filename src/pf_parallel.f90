@@ -152,6 +152,7 @@ contains
     call start_timer(pf, TPREDICTOR)
 
     fine_lev_p => pf%levels(pf%nlevels)
+
     call spreadq0(fine_lev_p, t0)
 
     !>  If we are doing a single level, then we only spreadq0 and return
@@ -253,7 +254,7 @@ contains
                 call spreadq0(coarse_lev_p, t0k)
              end if
           end if
-
+          
           call coarse_lev_p%ulevel%sweeper%sweep(pf, level_index, t0k, dt, coarse_lev_p%nsweeps_pred)
        enddo
 
@@ -1061,7 +1062,9 @@ contains
       call interpolate_time_space(pf, t0, dt, level_index,coarse_lev_p%Finterp)
       call pf_recv(pf, fine_lev_p, level_index*10000+iteration, .false.)
 
-       if (pf%rank /= 0) then
+      if (pf%rank /= 0) then
+         
+         call pf_compute_initial_condition_jump(pf, iteration, fine_lev_p, fine_lev_p%q0, fine_lev_p%Q(1))
           ! interpolate increment to q0 -- the fine initial condition
           ! needs the same increment that Q(1) got, but applied to the
           ! new fine initial condition
@@ -1130,6 +1133,9 @@ contains
       call pf_recv(pf, fine_lev_p, level_index*10000+iteration, .false.)
 
        if (pf%rank /= 0) then
+
+          call pf_compute_initial_condition_jump(pf, iteration, fine_lev_p, fine_lev_p%q0, fine_lev_p%Q(1))
+
           ! interpolate increment to q0 -- the fine initial condition
           ! needs the same increment that Q(1) got, but applied to the
           ! new fine initial condition
@@ -1151,6 +1157,24 @@ contains
     end do
 
   end subroutine pf_parareal_v_cycle
+
+
+  subroutine pf_compute_initial_condition_jump(pf, iteration, lev_ptr, q_recv, q_interp)
+    type(pf_pfasst_t), intent(in)    :: pf  
+    class(pf_level_t), intent(inout) :: lev_ptr 
+    class(pf_encap_t), intent(in)    :: q_recv 
+    class(pf_encap_t), intent(in)    :: q_interp 
+    integer,           intent(in)    :: iteration
+
+    class(pf_encap_t), allocatable   :: del
+
+    call lev_ptr%ulevel%factory%create_single(del, lev_ptr%index, SDC_KIND_SOL_NO_FEVAL, lev_ptr%nvars, lev_ptr%shape)
+    call del%copy(q_recv)
+    call del%axpy(-1.0_pfdp, q_interp)
+
+    print *, "### rank = ", pf%rank, " iteration = ", iteration, " norm = ", del%norm() 
+
+  end subroutine pf_compute_initial_condition_jump
 
   !
   !> Communication helpers

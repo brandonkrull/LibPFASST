@@ -14,11 +14,13 @@ module pf_mod_rkstepper
      logical                 :: implicit = .true.
      integer                 :: nstages
    contains
-     procedure(pf_f_eval_p), deferred :: f_eval
-     procedure(pf_f_comp_p), deferred :: f_comp
+     procedure(pf_f_eval_p),     deferred :: f_eval
+     procedure(pf_f_comp_p),     deferred :: f_comp
+     procedure(pf_f_finalize_p), deferred :: f_finalize
      procedure :: do_n_steps  => ark_do_n_steps
      procedure :: initialize  => ark_initialize
      procedure :: destroy     => ark_destroy
+     procedure :: ark_destroy
   end type pf_ark_t
 
   interface
@@ -44,6 +46,15 @@ module pf_mod_rkstepper
        class(pf_encap_t), intent(inout) :: f
        integer,           intent(in   ) :: piece
      end subroutine pf_f_comp_p
+
+     subroutine pf_f_finalize_p(this, y, t, dtq, level_index)
+       import pf_ark_t, pf_encap_t, pfdp
+       class(pf_ark_t),   intent(inout) :: this
+       class(pf_encap_t), intent(inout) :: y
+       real(pfdp),        intent(in   ) :: t
+       real(pfdp),        intent(in   ) :: dtq
+       integer,           intent(in   ) :: level_index
+     end subroutine pf_f_finalize_p
 
   end interface
 
@@ -84,9 +95,6 @@ contains
        else
           call lev%Q(1)%copy(lev%Q(lev%nnodes))
        end if
-
-       if (level_index == pf%nlevels) &
-            call lev%Q(1)%eprint()
 
        ! this assumes that cvec(1) == 0 
        if (this%explicit) &
@@ -143,6 +151,8 @@ contains
                call lev%Q(lev%nnodes)%axpy(dt*this%bvecI(j), lev%F(j,2))
 
        end do ! End loop over stage values
+
+       call this%f_finalize(lev%Q(lev%nnodes), t, dt, lev%index)
 
     end do ! End Loop over time steps
     
@@ -299,12 +309,105 @@ contains
                             69875.0_pfdp / 102672.0_pfdp, - 2260.0_pfdp / 8211.0_pfdp, 0.25_pfdp /)
        this%bvecI      = this%bvecE   
 
+    else if (this%order == 5) then
+
+       ! Fifth-order Kennedy-Carpenter
+       
+       nstages = 8 
+
+       this%nstages = nstages
+       allocate(this%AmatE(nstages,nstages))  !  Explicit Butcher matrix
+       allocate(this%AmatI(nstages,nstages))  !  Implicit Butcher matrix
+       allocate(this%cvec(nstages))           !  stage times
+       allocate(this%bvecE(nstages))          !  quadrature weights on explicit
+       allocate(this%bvecI(nstages))          !  quadrature weights on implicit
+
+       this%AmatE = 0.0_pfdp
+       this%AmatI = 0.0_pfdp
+       this%bvecE = 0.0_pfdp
+       this%bvecI = 0.0_pfdp
+       this%cvec  = 0.0_pfdp
+
+       this%AmatE(2,1) =   41.0_pfdp              / 100.0_pfdp
+       this%AmatE(3,1) =   367902744464.0_pfdp    / 2072280473677.0_pfdp
+       this%AmatE(3,2) =   677623207551.0_pfdp    / 8224143866563.0_pfdp
+       this%AmatE(4,1) =   1268023523408.0_pfdp   / 10340822734521.0_pfdp
+       this%AmatE(4,2) =   0.0_pfdp
+       this%AmatE(4,3) =   1029933939417.0_pfdp   / 13636558850479.0_pfdp
+       this%AmatE(5,1) =   14463281900351.0_pfdp  / 6315353703477.0_pfdp
+       this%AmatE(5,2) =   0.0_pfdp
+       this%AmatE(5,3) =   66114435211212.0_pfdp  / 5879490589093.0_pfdp
+       this%AmatE(5,4) = - 54053170152839.0_pfdp  / 4284798021562.0_pfdp
+       this%AmatE(6,1) =   14090043504691.0_pfdp  / 34967701212078.0_pfdp
+       this%AmatE(6,2) =   0.0_pfdp
+       this%AmatE(6,3) =   15191511035443.0_pfdp  / 11219624916014.0_pfdp
+       this%AmatE(6,4) = - 18461159152457.0_pfdp  / 12425892160975.0_pfdp
+       this%AmatE(6,5) = - 281667163811.0_pfdp    / 9011619295870.0_pfdp
+       this%AmatE(7,1) =   19230459214898.0_pfdp  / 13134317526959.0_pfdp
+       this%AmatE(7,2) =   0.0_pfdp
+       this%AmatE(7,3) =   21275331358303.0_pfdp  / 2942455364971.0_pfdp
+       this%AmatE(7,4) = - 38145345988419.0_pfdp  / 4862620318723.0_pfdp
+       this%AmatE(7,5) = - 1.0_pfdp               / 8.0_pfdp
+       this%AmatE(7,6) = - 1.0_pfdp               / 8.0_pfdp
+       this%AmatE(8,1) = - 19977161125411.0_pfdp  / 11928030595625.0_pfdp
+       this%AmatE(8,2) =   0.0_pfdp
+       this%AmatE(8,3) = - 40795976796054.0_pfdp  / 6384907823539.0_pfdp
+       this%AmatE(8,4) =   177454434618887.0_pfdp / 12078138498510.0_pfdp
+       this%AmatE(8,5) =   782672205425.0_pfdp    / 8267701900261.0_pfdp
+       this%AmatE(8,6) = - 69563011059811.0_pfdp  / 9646580694205.0_pfdp
+       this%AmatE(8,7) =   7356628210526.0_pfdp   / 4942186776405.0_pfdp
+
+       this%AmatI(2,1) =   41.0_pfdp              / 200.0_pfdp
+       this%AmatI(2,2) =   41.0_pfdp              / 200.0_pfdp
+       this%AmatI(3,1) =   41.0_pfdp              / 100.0_pfdp
+       this%AmatI(3,2) = - 567603406766.0_pfdp    / 11931857230679.0_pfdp
+       this%AmatI(3,3) =   41.0_pfdp              / 100.0_pfdp
+       this%AmatI(4,1) =   683785636431.0_pfdp    / 9252920307686.0_pfdp
+       this%AmatI(4,2) =   0.0_pfdp
+       this%AmatI(4,3) = - 110385047103.0_pfdp    / 1367015193373.0_pfdp
+       this%AmatI(4,4) =   41.0_pfdp              / 200.0_pfdp
+       this%AmatI(5,1) =   3016520224154.0_pfdp   / 10081342136671.0_pfdp
+       this%AmatI(5,2) =   0.0_pfdp
+       this%AmatI(5,3) =   30586259806659.0_pfdp  / 12414158314087.0_pfdp
+       this%AmatI(5,4) = - 22760509404356.0_pfdp  / 11113319521817.0_pfdp
+       this%AmatI(5,5) =   41.0_pfdp              / 200.0_pfdp
+       this%AmatI(6,1) =   218866479029.0_pfdp    / 1489978393911.0_pfdp
+       this%AmatI(6,2) =   0.0_pfdp
+       this%AmatI(6,3) =   638256894668.0_pfdp    / 5436446318841.0_pfdp
+       this%AmatI(6,4) = - 1179710474555.0_pfdp   / 5321154724896.0_pfdp
+       this%AmatI(6,5) = - 60928119172.0_pfdp     / 8023461067671.0_pfdp
+       this%AmatI(6,6) =   41.0_pfdp              / 200.0_pfdp
+       this%AmatI(7,1) =   1020004230633.0_pfdp   / 5715676835656.0_pfdp
+       this%AmatI(7,2) =   0.0_pfdp 
+       this%AmatI(7,3) =   25762820946817.0_pfdp  / 25263940353407.0_pfdp
+       this%AmatI(7,4) = - 2161375909145.0_pfdp   / 9755907335909.0_pfdp
+       this%AmatI(7,5) = - 211217309593.0_pfdp    / 5846859502534.0_pfdp 
+       this%AmatI(7,6) = - 4269925059573.0_pfdp   / 7827059040749.0_pfdp
+       this%AmatI(7,7) =   41.0_pfdp              / 200.0_pfdp
+       this%AmatI(8,1) = - 872700587467.0_pfdp    / 9133579230613.0_pfdp
+       this%AmatI(8,2) =   0.0_pfdp
+       this%AmatI(8,3) =   0.0_pfdp
+       this%AmatI(8,4) =   22348218063261.0_pfdp  / 9555858737531.0_pfdp
+       this%AmatI(8,5) = - 1143369518992.0_pfdp   / 8141816002931.0_pfdp
+       this%AmatI(8,6) = - 39379526789629.0_pfdp  / 19018526304540.0_pfdp
+       this%AmatI(8,7) =   32727382324388.0_pfdp  / 42900044865799.0_pfdp
+       this%AmatI(8,8) =   41.0_pfdp              / 200.0_pfdp
+      
+       this%cvec       = (/ 0.0_pfdp,               41.0_pfdp / 100.0_pfdp, 2935347310677.0_pfdp / 11292855782101.0_pfdp, & 
+                            1426016391358.0_pfdp / 7196633302097.0_pfdp, 92.0_pfdp / 100.0_pfdp, 24.0_pfdp / 100.0_pfdp,  & 
+                            3.0_pfdp  / 5.0_pfdp,  1.0_pfdp  /)
+       this%bvecE      = (/ - 872700587467.0_pfdp / 9133579230613.0_pfdp,  0.0_pfdp, 0.0_pfdp, & 
+                              22348218063261.0_pfdp / 9555858737531.0_pfdp, - 1143369518992.0_pfdp / 8141816002931.0_pfdp, &
+                              - 39379526789629.0_pfdp / 19018526304540.0_pfdp, 32727382324388.0_pfdp / 42900044865799.0_pfdp, &
+                              41.0_pfdp / 200.0_pfdp /)
+       this%bvecI      = this%bvecE   
+
     else
        stop "ark_initialize: This RK order is not supported"
     end if
 
     if (lev%nnodes < this%nstages + 1)  &
-         stop "ark_initialize: With RK, lev%nnodes should be equal to rkstepper%nstages + 1"
+         print *, "Warning: ark_initialize: With RK, lev%nnodes should be equal to rkstepper%nstages + 1"
 
   end subroutine ark_initialize
 

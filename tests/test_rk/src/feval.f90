@@ -5,13 +5,14 @@
 module feval
   use pf_mod_dtype
   use pf_mod_ndarray
-  use pf_mod_imexQ
+  use pf_mod_misdcQ
   use pf_mod_rkstepper
   implicit none
 
   real(pfdp), parameter :: &
        a = 1.0_pfdp, & ! "advection"
-       d = 2.0_pfdp    ! "diffusion"
+       d = 2.0_pfdp, & ! "diffusion"
+       r = 3.0_pfdp    ! "reaction"
 
   ! Define the derived user_lever type
   type, extends(pf_user_level_t) :: ad_level_t
@@ -24,7 +25,7 @@ module feval
   end type ad_level_t
 
   ! Define the derived sweeper type
-  type, extends(pf_imexQ_t) :: ad_sweeper_t
+  type, extends(pf_misdcQ_t) :: ad_sweeper_t
 
    contains
 
@@ -38,8 +39,9 @@ module feval
      
    contains
        
-     procedure :: f_eval => ad_stepper_f_eval
-     procedure :: f_comp => ad_stepper_f_comp
+     procedure :: f_eval     => ad_stepper_f_eval
+     procedure :: f_comp     => ad_stepper_f_comp
+     procedure :: f_finalize => ad_stepper_f_finalize
      
   end type ad_stepper_t
 
@@ -47,12 +49,12 @@ contains
 
   ! Helper functions
 
-  function as_ad_sweeper(sweeper) result(r)
+  function as_ad_sweeper(sweeper) result(ptr)
     class(pf_sweeper_t), intent(inout), target :: sweeper
-    class(ad_sweeper_t), pointer :: r
+    class(ad_sweeper_t), pointer :: ptr
     select type(sweeper)
     type is (ad_sweeper_t)
-       r => sweeper
+       ptr => sweeper
     class default
        stop
     end select
@@ -62,7 +64,7 @@ contains
     class(ad_sweeper_t), intent(inout) :: this
     class(pf_level_t), intent(inout)   :: lev
     
-    call this%imexQ_destroy(lev)
+    call this%misdcQ_destroy(lev)
 
   end subroutine destroy
 
@@ -78,7 +80,7 @@ contains
     real(pfdp), intent(in)  :: t
     real(pfdp), intent(out) :: yex(:)
 
-    yex(1) = dexp((a+d)*t)
+    yex(1) = dexp((a+d+r)*t)
   end subroutine exact
 
   ! Sweeper functions
@@ -100,8 +102,12 @@ contains
 
     if (piece == 1) then
        fvec = a*yvec
-    else 
+    else if (piece == 2) then
        fvec = d*yvec
+    else if (piece == 3) then
+       fvec = r*yvec
+    else 
+       stop "piece not implemented"   
     end if
 
   end subroutine ad_sweeper_f_eval
@@ -127,8 +133,13 @@ contains
     if (piece == 2) then
        yvec = rhsvec / (1.0_pfdp - d*dtq)
        fvec = (yvec - rhsvec) / dtq 
-    else 
+    else if (piece == 3) then
+       yvec = rhsvec / (1.0_pfdp - r*dtq)
+       fvec = (yvec - rhsvec) / dtq
+    else if (piece == 1) then       
        stop("Error: Piece 1 is explicit")
+    else
+       stop "piece not implemented"
     end if
 
   end subroutine ad_sweeper_f_comp
@@ -184,6 +195,22 @@ contains
     end if
 
   end subroutine ad_stepper_f_comp
+
+  subroutine ad_stepper_f_finalize(this, y, t, dtq, level_index)
+    class(ad_stepper_t), intent(inout) :: this
+    class(pf_encap_t),   intent(inout) :: y
+    real(pfdp),          intent(in   ) :: t
+    real(pfdp),          intent(in   ) :: dtq
+    integer,             intent(in   ) :: level_index
+
+    real(pfdp),          pointer       :: yvec(:)
+    
+    yvec   => array1(y)
+    
+    yvec = yvec / (1 - r * dtq)
+    
+  end subroutine ad_stepper_f_finalize
+
 
   ! User_level functions
 
