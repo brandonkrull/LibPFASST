@@ -48,6 +48,8 @@ contains
     class(pf_encap_t), allocatable :: c_delta(:)    !  Coarse in time and space
     class(pf_encap_t), allocatable :: cf_delta(:)   !  Coarse in time but fine in space
 
+    class(pf_encap_t), allocatable :: Ftmp(:) 
+
     f_lev_ptr => pf%levels(level_index)   ! fine level
     c_lev_ptr => pf%levels(level_index-1) ! coarse level
 
@@ -58,6 +60,8 @@ contains
     call c_lev_ptr%ulevel%factory%create_array(c_delta,  c_lev_ptr%nnodes, &
       c_lev_ptr%index, SDC_KIND_CORRECTION, c_lev_ptr%nvars, c_lev_ptr%shape)
     call f_lev_ptr%ulevel%factory%create_array(cf_delta, c_lev_ptr%nnodes, &
+      f_lev_ptr%index, SDC_KIND_CORRECTION, f_lev_ptr%nvars, f_lev_ptr%shape)
+    call f_lev_ptr%ulevel%factory%create_array(Ftmp, f_lev_ptr%nnodes, &
       f_lev_ptr%index, SDC_KIND_CORRECTION, f_lev_ptr%nvars, f_lev_ptr%shape)
 
     !> set time at coarse and fine nodes
@@ -78,7 +82,7 @@ contains
        call c_delta(m)%copy(c_lev_ptr%Q(m))
        call c_delta(m)%axpy(-1.0_pfdp, c_lev_ptr%pQ(m))
        call f_lev_ptr%ulevel%interpolate(f_lev_ptr,c_lev_ptr, cf_delta(m), c_delta(m), c_times(m))
-    end do
+    end do  
 
     !> interpolate corrections in time
     call pf_apply_mat(f_lev_ptr%Q, 1.0_pfdp, f_lev_ptr%tmat, cf_delta, .false.)
@@ -98,7 +102,13 @@ contains
          end do
 
          ! interpolate corrections  in time
-          call pf_apply_mat(f_lev_ptr%F(:,p), 1.0_pfdp, f_lev_ptr%tmat, cf_delta, .false.)
+         !call pf_apply_mat(f_lev_ptr%F(:,p), 1.0_pfdp, f_lev_ptr%tmat, cf_delta, .false.)
+
+         call pf_apply_mat(Ftmp, 1.0_pfdp, f_lev_ptr%tmat, cf_delta, .false.)
+         
+         do m = 1, f_lev_ptr%nnodes
+            call f_lev_ptr%F(m,p)%copy(Ftmp(m))
+         end do
 
        end do !  Loop on npieces
     else    ! recompute function values
@@ -113,6 +123,9 @@ contains
       c_lev_ptr%index, SDC_KIND_CORRECTION, c_lev_ptr%nvars, c_lev_ptr%shape)
     call f_lev_ptr%ulevel%factory%destroy_array(cf_delta, c_lev_ptr%nnodes, &
       f_lev_ptr%index, SDC_KIND_CORRECTION, f_lev_ptr%nvars, f_lev_ptr%shape)
+    call f_lev_ptr%ulevel%factory%destroy_array(Ftmp, f_lev_ptr%nnodes,     &
+      f_lev_ptr%index, SDC_KIND_CORRECTION, f_lev_ptr%nvars, f_lev_ptr%shape)
+
 
     call end_timer(pf, TINTERPOLATE + f_lev_ptr%index - 1)
     call call_hooks(pf, f_lev_ptr%index, PF_POST_INTERP_ALL)
@@ -134,7 +147,7 @@ contains
     call start_timer(pf, TINTERPOLATE + f_lev_ptr%index - 1)
 
     !> create local workspace
-    call c_lev_ptr%ulevel%factory%create_single(c_q0,  f_lev_ptr%index, SDC_KIND_SOL_NO_FEVAL, c_lev_ptr%nvars, c_lev_ptr%shape)
+    call c_lev_ptr%ulevel%factory%create_single(c_q0,  c_lev_ptr%index, SDC_KIND_SOL_NO_FEVAL, c_lev_ptr%nvars, c_lev_ptr%shape)
     call f_lev_ptr%ulevel%factory%create_single(f_q0,  f_lev_ptr%index, SDC_KIND_SOL_NO_FEVAL, f_lev_ptr%nvars, f_lev_ptr%shape)
     call c_lev_ptr%ulevel%factory%create_single(c_delta, c_lev_ptr%index, SDC_KIND_CORRECTION,   c_lev_ptr%nvars, c_lev_ptr%shape)
     call f_lev_ptr%ulevel%factory%create_single(f_delta, f_lev_ptr%index, SDC_KIND_CORRECTION,   f_lev_ptr%nvars, f_lev_ptr%shape)

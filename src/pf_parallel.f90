@@ -44,9 +44,9 @@ contains
     class(pf_encap_t), intent(inout), optional :: qend    !<  The computed solution at tend
 
     !  Local variables
-    integer :: nproc  !<  Total number of processors
-    integer :: nsteps_loc  !<  local number of time steps    
-    real(pfdp) :: tend_loc !<  The final time of run
+    integer    :: nproc       !<  Total number of processors
+    integer    :: nsteps_loc  !<  local number of time steps    
+    real(pfdp) :: tend_loc    !<  The final time of run
 
     ! make a local copy of nproc
     nproc = pf%comm%nproc
@@ -74,7 +74,6 @@ contains
 
     ! figure out what routine to call
     if (pf%nlevels .eq. 1) then
-       print *,'Calling pipelined SDC with 1 level'
        if (present(qend)) then
           call pf_pipeline_run(pf, q0, dt, tend_loc, nsteps_loc, qend)
        else
@@ -102,7 +101,6 @@ contains
           end if
 
        else
-          print *,'Calling pipelined SDC with multiple levels'
           if (present(qend)) then
              call pf_pipeline_run(pf, q0, dt, tend_loc, nsteps_loc, qend)
           else
@@ -258,7 +256,6 @@ contains
           call coarse_lev_p%ulevel%sweeper%sweep(pf, level_index, t0k, dt, coarse_lev_p%nsweeps_pred)
        enddo
 
-       ! print*, 'rank ', pf%rank, ' just did ', k-1, ' iterations in the predictor'
 
     end if  ! (pf%nlevels > 1) then
 
@@ -407,8 +404,6 @@ contains
           call coarse_lev_p%ulevel%stepper%do_n_steps(pf, level_index, t0k, dt, coarse_lev_p%nsteps_rk)
        enddo
 
-       ! print*, 'rank ', pf%rank, ' just did ', k-1, ' iterations in the predictor'
-
     end if  ! (pf%nlevels > 1) then
 
     call end_timer(pf, TPREDICTOR)
@@ -553,7 +548,7 @@ contains
        !  Do this when starting a new block, broadcast new initial conditions to all procs
        if (k > 1 .and. qbroadcast) then
           fine_lev_p => pf%levels(pf%nlevels)
-          call pf%comm%wait(pf, pf%nlevels,ierror)             !<  make sure everyone is done
+          call pf%comm%wait(pf, pf%nlevels,ierror)      !<  make sure everyone is done
           call fine_lev_p%qend%pack(fine_lev_p%send)    !<  Pack away your last solution
           call pf_broadcast(pf, fine_lev_p%send, fine_lev_p%nvars, pf%comm%nproc-1)
           call fine_lev_p%q0%unpack(fine_lev_p%send)    !<  Everyone resets their q0
@@ -642,7 +637,6 @@ contains
 
     call start_timer(pf, TTOTAL)
 
-
     pf%state%dt      = dt
     pf%state%proc    = pf%rank+1
     
@@ -695,7 +689,7 @@ contains
        !  Do this when starting a new block, broadcast new initial conditions to all procs
        if (k > 1 .and. qbroadcast) then
           fine_lev_p => pf%levels(pf%nlevels)
-          call pf%comm%wait(pf, pf%nlevels,ierror)             !<  make sure everyone is done
+          call pf%comm%wait(pf, pf%nlevels,ierror)      !<  make sure everyone is done
           call fine_lev_p%qend%pack(fine_lev_p%send)    !<  Pack away your last solution
           call pf_broadcast(pf, fine_lev_p%send, fine_lev_p%nvars, pf%comm%nproc-1)
           call fine_lev_p%q0%unpack(fine_lev_p%send)    !<  Everyone resets their q0
@@ -1064,7 +1058,9 @@ contains
 
       if (pf%rank /= 0) then
          
-         call pf_compute_initial_condition_jump(pf, iteration, fine_lev_p, fine_lev_p%q0, fine_lev_p%Q(1))
+         if (pf%echo_timings .eqv. .false.) then
+            call pf_compute_initial_condition_jump(pf, iteration, fine_lev_p, fine_lev_p%q0, fine_lev_p%Q(1))
+         end if
           ! interpolate increment to q0 -- the fine initial condition
           ! needs the same increment that Q(1) got, but applied to the
           ! new fine initial condition
@@ -1134,7 +1130,9 @@ contains
 
        if (pf%rank /= 0) then
 
-          call pf_compute_initial_condition_jump(pf, iteration, fine_lev_p, fine_lev_p%q0, fine_lev_p%Q(1))
+          if (pf%echo_timings .eqv. .false.) then
+             call pf_compute_initial_condition_jump(pf, iteration, fine_lev_p, fine_lev_p%q0, fine_lev_p%Q(1))
+          end if
 
           ! interpolate increment to q0 -- the fine initial condition
           ! needs the same increment that Q(1) got, but applied to the
