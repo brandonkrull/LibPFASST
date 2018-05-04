@@ -111,7 +111,7 @@ contains
           lev_fine%tmat(lev_fine%nnodes,lev_coarse%nnodes) = 1.0_pfdp
 
           lev_fine%rmat(1,1) = 1.0_pfdp
-          lev_fine%rmat(lev_coarse%nnodes,lev_fine%nnodes) = 1.0_pfdp
+          lev_fine%rmat(lev_coarse%nnodes,lev_fine%nnodes) = 0.0_pfdp
 
        ! else compute the interpolation matrix
        else
@@ -217,8 +217,8 @@ contains
     integer :: l
 
     !>  destroy all levels
-    do l = 1, pf%nlevels
-       call pf_level_destroy(pf%levels(l),pf%nlevels)
+    do l = pf%nlevels, 1, -1
+       call pf_level_destroy(pf,pf%levels(l),pf%nlevels)
     end do
     !>  deallocate pfasst pointer arrays
     deallocate(pf%levels)
@@ -232,12 +232,16 @@ contains
 
 
   !> Deallocate PFASST level
-  subroutine pf_level_destroy(lev,nlevels)
-    class(pf_level_t), intent(inout) :: lev      !<  level to destroy
-    integer                          :: nlevels  !<  number of pfasst levels
+  subroutine pf_level_destroy(pf,lev,nlevels)
+    type(pf_pfasst_t), intent(inout), target :: pf  !<  Main pfasst structure
+    class(pf_level_t), intent(inout)         :: lev      !<  level to destroy
+    integer                                  :: nlevels  !<  number of pfasst levels
 
-    
-    integer                          :: npieces  !<  local copy of number of function pieces
+    !  Local variables
+    class(pf_level_t), pointer               :: c_lev_ptr   !  Pointer to coarse level
+    class(pf_level_t), pointer               :: f_lev_ptr   !  Pointer to this level
+
+    integer                                  :: npieces  !<  local copy of number of function pieces
 
     if (.not. lev%allocated) return
 
@@ -289,6 +293,51 @@ contains
     if (allocated(lev%rmat)) then
        deallocate(lev%rmat)
    end if
+
+   if (lev%interp_workspace_allocated .eqv. .true.) then
+      
+      f_lev_ptr => pf%levels(lev%index)   ! fine level
+      c_lev_ptr => pf%levels(lev%index-1) ! coarse level
+
+      call c_lev_ptr%ulevel%factory%destroy_array(f_lev_ptr%c_delta,  c_lev_ptr%nnodes,   &
+           c_lev_ptr%index, SDC_KIND_CORRECTION, c_lev_ptr%nvars, c_lev_ptr%shape)
+      call f_lev_ptr%ulevel%factory%destroy_array(f_lev_ptr%cf_delta, c_lev_ptr%nnodes,   &
+           f_lev_ptr%index, SDC_KIND_CORRECTION, f_lev_ptr%nvars, f_lev_ptr%shape)
+      if (f_lev_ptr%Finterp .eqv. .true.) then
+         call f_lev_ptr%ulevel%factory%destroy_array(f_lev_ptr%f_delta, f_lev_ptr%nnodes, &
+              f_lev_ptr%index, SDC_KIND_CORRECTION, f_lev_ptr%nvars, f_lev_ptr%shape)
+      end if
+
+   end if
+
+   if (lev%interp_q0_workspace_allocated .eqv. .true.) then
+      
+      f_lev_ptr => pf%levels(lev%index)   ! fine level
+      c_lev_ptr => pf%levels(lev%index-1) ! coarse level
+
+      call c_lev_ptr%ulevel%factory%destroy_single(f_lev_ptr%c_q0,       &
+           f_lev_ptr%index, SDC_KIND_SOL_NO_FEVAL, c_lev_ptr%nvars, c_lev_ptr%shape)
+      call f_lev_ptr%ulevel%factory%destroy_single(f_lev_ptr%f_q0,       &
+           f_lev_ptr%index, SDC_KIND_SOL_NO_FEVAL, f_lev_ptr%nvars, f_lev_ptr%shape)
+      call c_lev_ptr%ulevel%factory%destroy_single(f_lev_ptr%c_delta_q0, & 
+           c_lev_ptr%index, SDC_KIND_CORRECTION,   c_lev_ptr%nvars, c_lev_ptr%shape)
+      call f_lev_ptr%ulevel%factory%destroy_single(f_lev_ptr%f_delta_q0, & 
+           f_lev_ptr%index, SDC_KIND_CORRECTION,   f_lev_ptr%nvars, f_lev_ptr%shape)
+
+   end if
+   
+   if (lev%restrict_workspace_allocated .eqv. .true.) then
+
+      f_lev_ptr => pf%levels(lev%index)   ! fine level
+      c_lev_ptr => pf%levels(lev%index-1) ! coarse level
+      
+      call c_lev_ptr%ulevel%factory%destroy_array(f_lev_ptr%c_tmp_array, c_lev_ptr%nnodes, &
+           c_lev_ptr%index, SDC_KIND_INTEGRAL, c_lev_ptr%nvars, c_lev_ptr%shape)
+      call c_lev_ptr%ulevel%factory%destroy_array(f_lev_ptr%f_int_arrayr, c_lev_ptr%nnodes, &
+           c_lev_ptr%index,  SDC_KIND_INTEGRAL, c_lev_ptr%nvars, c_lev_ptr%shape)
+
+   end if
+
   end subroutine pf_level_destroy
 
   !>  Subroutine to read pfasst options from file and command line

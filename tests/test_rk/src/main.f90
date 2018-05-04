@@ -21,7 +21,7 @@ contains
 
     implicit none
 
-    integer, parameter :: maxlevs = 1
+    integer, parameter :: maxlevs = 2
 
     type(pf_pfasst_t)             :: pf
     type(pf_comm_t)               :: comm
@@ -35,8 +35,8 @@ contains
     ! initialize pfasst
     !
 
-    nvars  = [ 1 ]   ! number of dofs on the time/space levels
-    nnodes = [ 7 ]   ! number of sdc nodes on time/space levels
+    nvars  = [ 1, 1 ]   ! number of dofs on the time/space levels
+    nnodes = [ 4, 7 ]   ! number of sdc nodes on time/space levels
     nsteps = 0
     dt     = 0.05_pfdp
 
@@ -44,7 +44,7 @@ contains
     call pf_pfasst_create(pf, comm, maxlevs)
 
     pf%qtype       = SDC_GAUSS_LOBATTO
-    pf%niters      = 20
+    pf%niters      = 4
     pf%abs_res_tol = 0
     pf%rel_res_tol = 0
     pf%Pipeline_G  = .false.

@@ -78,10 +78,6 @@ contains
 
     real(pfdp), allocatable :: c_times(:)
     real(pfdp), allocatable :: f_times(:)
-    class(pf_encap_t), allocatable :: &
-      c_tmp_array(:), &    ! coarse integral of coarse function values
-      f_int_array(:), &    ! fine integral of fine function values
-      f_int_arrayr(:)      ! coarse integral of restricted fine function values
     
     f_lev_ptr => pf%levels(level_index);
     c_lev_ptr => pf%levels(level_index-1)
@@ -91,12 +87,20 @@ contains
     !
     ! create workspaces
     !
-    call c_lev_ptr%ulevel%factory%create_array(c_tmp_array, c_lev_ptr%nnodes, &
-      c_lev_ptr%index, SDC_KIND_INTEGRAL, c_lev_ptr%nvars, c_lev_ptr%shape)
-    call c_lev_ptr%ulevel%factory%create_array(f_int_arrayr, c_lev_ptr%nnodes, &
-      c_lev_ptr%index, SDC_KIND_INTEGRAL, c_lev_ptr%nvars, c_lev_ptr%shape)
-    call c_lev_ptr%ulevel%factory%create_array(f_int_array, f_lev_ptr%nnodes, &
-      f_lev_ptr%index, SDC_KIND_INTEGRAL, f_lev_ptr%nvars, f_lev_ptr%shape)
+    
+    if (f_lev_ptr%restrict_workspace_allocated .eqv. .false.) then 
+       
+       ! allocate memory 
+       call c_lev_ptr%ulevel%factory%create_array(f_lev_ptr%c_tmp_array, c_lev_ptr%nnodes, &
+            c_lev_ptr%index, SDC_KIND_INTEGRAL, c_lev_ptr%nvars, c_lev_ptr%shape)
+       call c_lev_ptr%ulevel%factory%create_array(f_lev_ptr%f_int_arrayr, c_lev_ptr%nnodes, &
+            c_lev_ptr%index, SDC_KIND_INTEGRAL, c_lev_ptr%nvars, c_lev_ptr%shape)
+
+       ! set the flag
+       f_lev_ptr%restrict_workspace_allocated = .true. 
+
+    end if
+
     allocate(c_times(c_lev_ptr%nnodes))
     allocate(f_times(f_lev_ptr%nnodes))
     !
@@ -119,7 +123,7 @@ contains
     if (pf%state%iter >= pf%taui0)  then
        ! compute '0 to node' integral on the coarse level
       call c_lev_ptr%ulevel%sweeper%integrate(c_lev_ptr, c_lev_ptr%Q, &
-        c_lev_ptr%F, dt, c_tmp_array)
+        c_lev_ptr%F, dt, f_lev_ptr%c_tmp_array)
        ! compute '0 to node' integral on the fine level
       call f_lev_ptr%ulevel%sweeper%integrate(f_lev_ptr, f_lev_ptr%Q, &
         f_lev_ptr%F, dt, f_lev_ptr%I)
@@ -131,24 +135,17 @@ contains
        end if
 
        ! restrict '0 to node' integral on the fine level (which was
-       call restrict_sdc(f_lev_ptr, c_lev_ptr, f_lev_ptr%I, f_int_arrayr, .true.,f_times)
+       call restrict_sdc(f_lev_ptr, c_lev_ptr, f_lev_ptr%I, f_lev_ptr%f_int_arrayr, .true.,f_times)
 
       ! compute '0 to node' tau correction
        do m = 1, c_lev_ptr%nnodes-1
-          call c_lev_ptr%tauQ(m)%axpy(1.0_pfdp, f_int_arrayr(m))
-          call c_lev_ptr%tauQ(m)%axpy(-1.0_pfdp, c_tmp_array(m))
+          call c_lev_ptr%tauQ(m)%axpy(1.0_pfdp, f_lev_ptr%f_int_arrayr(m))
+          call c_lev_ptr%tauQ(m)%axpy(-1.0_pfdp, f_lev_ptr%c_tmp_array(m))
        end do
     end if
 
     call end_timer(pf, TRESTRICT + level_index - 1)
     call call_hooks(pf, level_index, PF_POST_RESTRICT_ALL)
-
-    call c_lev_ptr%ulevel%factory%destroy_array(c_tmp_array, c_lev_ptr%nnodes, &
-      c_lev_ptr%index, SDC_KIND_INTEGRAL, c_lev_ptr%nvars, c_lev_ptr%shape)
-    call c_lev_ptr%ulevel%factory%destroy_array(f_int_arrayr, c_lev_ptr%nnodes, &
-      c_lev_ptr%index,  SDC_KIND_INTEGRAL, c_lev_ptr%nvars, c_lev_ptr%shape)
-    call f_lev_ptr%ulevel%factory%destroy_array(f_int_array, f_lev_ptr%nnodes, &
-      f_lev_ptr%index, SDC_KIND_INTEGRAL, f_lev_ptr%nvars, f_lev_ptr%shape)
 
     deallocate(c_times)
     deallocate(f_times)

@@ -181,6 +181,24 @@ module pf_mod_dtype
           F(:,:), &                     !< functions values at sdc nodes
           pF(:,:)                       !< functions at sdc nodes, previous sweep
 
+     !>  Interpolation and restriction data structures
+     logical :: interp_workspace_allocated = .false.
+     class(pf_encap_t), allocatable :: &
+          f_delta(:),  &   ! delta on the fine level
+          cf_delta(:), &   ! delta fine in space and coarse in time
+          c_delta(:)       ! delta on the coarse level
+     
+     logical :: interp_q0_workspace_allocated = .false.
+     class(pf_encap_t), allocatable :: &
+          c_delta_q0, &    !<  coarse correction
+          f_delta_q0, &    !<  fine correction
+          c_q0,       &    !<  coarse initial condition
+          f_q0             !<  fine  initial condition
+
+     logical :: restrict_workspace_allocated = .false.
+     class(pf_encap_t), allocatable :: &
+          c_tmp_array(:), &  ! coarse integral of coarse function values
+          f_int_arrayr(:)    ! coarse integral of restricted fine function values
 
      integer, allocatable :: shape(:)   !< user defined shape array
 

@@ -13,7 +13,11 @@ module pf_mod_rkstepper
      logical                 :: explicit = .true.
      logical                 :: implicit = .true.
      integer                 :: nstages
+
+     class(pf_encap_t), allocatable :: rhs   !> holds rhs for implicit solve
+
    contains
+
      procedure(pf_f_eval_p),     deferred :: f_eval
      procedure(pf_f_comp_p),     deferred :: f_comp
      procedure(pf_f_finalize_p), deferred :: f_finalize
@@ -73,18 +77,17 @@ contains
     integer,           intent(in)            :: nsteps_rk    !  Number of steps to use
 
     class(pf_level_t), pointer               :: lev          !  Pointer to level level_index
-    class(pf_encap_t), allocatable           :: rhs          !  Accumulated right hand side for implicit solves
+
     integer                                  :: j, m, n   !  Loop counters
     real(pfdp)                               :: t, dt        !  Size of each ark step
 
     ! Assign pointer to appropriate level
     lev => pf%levels(level_index)   
+
+    call start_timer(pf, TLEVEL+lev%index-1)
     
     ! Set the internal time step size based on the number of rk steps
     dt = big_dt/real(nsteps_rk, pfdp)
-
-    ! Allocate space for the right-hand side
-    call lev%ulevel%factory%create_single(rhs, lev%index, SDC_KIND_SOL_FEVAL, lev%nvars, lev%shape)
 
     ! Loop over time steps
     do n = 1, nsteps_rk      
@@ -109,25 +112,25 @@ contains
           t = t0 + dt*(n-1) + dt*this%cvec(m+1)
 
           ! Initialize the right-hand size for each stage
-          call rhs%copy(lev%Q(1))
+          call this%rhs%copy(lev%Q(1))
 
           do j = 1, m
 
              ! Add explicit rhs
              if (this%explicit) &
-                  call rhs%axpy(dt*this%AmatE(m+1,j), lev%F(j,1))
+                  call this%rhs%axpy(dt*this%AmatE(m+1,j), lev%F(j,1))
 
              ! Add implicit rhs
              if (this%implicit) &
-                  call rhs%axpy(dt*this%AmatI(m+1,j), lev%F(j,2))
+                  call this%rhs%axpy(dt*this%AmatI(m+1,j), lev%F(j,2))
 
           end do
 
           ! Solve the implicit system
           if (this%implicit .and. this%AmatI(m+1,m+1) /= 0) then
-             call this%f_comp(lev%Q(m+1), t, dt*this%AmatI(m+1,m+1), rhs, lev%index,lev%F(m+1,2), 2)
+             call this%f_comp(lev%Q(m+1), t, dt*this%AmatI(m+1,m+1), this%rhs, lev%index,lev%F(m+1,2), 2)
           else
-             call lev%Q(m+1)%copy(rhs)
+             call lev%Q(m+1)%copy(this%rhs)
           end if
                     
           ! Reevaluate explicit rhs with the new solution
@@ -157,7 +160,10 @@ contains
     end do ! End Loop over time steps
     
     ! Assign final value to end of time step
+    call pf_residual(pf, lev, dt)
     call lev%qend%copy(lev%Q(lev%nnodes))
+
+    call end_timer(pf, TLEVEL+lev%index-1)
 
   end subroutine ark_do_n_steps
   
@@ -172,7 +178,35 @@ contains
     this%explicit = .true.
     this%implicit = .true.
 
-    if (this%order == 2) then 
+    ! Allocate space for the right-hand side
+    call lev%ulevel%factory%create_single(this%rhs, lev%index, SDC_KIND_SOL_FEVAL, lev%nvars, lev%shape)
+    
+    if (this%order == 1) then
+
+       nstages = 2
+       
+       this%nstages = nstages
+       allocate(this%AmatE(nstages,nstages))  !  Explicit Butcher matrix
+       allocate(this%AmatI(nstages,nstages))  !  Implicit Butcher matrix
+       allocate(this%cvec(nstages))           !  stage times
+       allocate(this%bvecE(nstages))          !  quadrature weights on explicit
+       allocate(this%bvecI(nstages))          !  quadrature weights on implicit
+
+       this%AmatE = 0.0_pfdp
+       this%AmatI = 0.0_pfdp
+       this%bvecE = 0.0_pfdp
+       this%bvecI = 0.0_pfdp
+       this%cvec  = 0.0_pfdp
+
+       this%AmatE(2,1) = 1.0_pfdp
+       
+       this%AmatI(2,2) = 1.0_pfdp
+       
+       this%cvec       = (/ ZERO, ONE /)
+       this%bvecE      = (/ ZERO, ONE /)
+       this%bvecI      = this%bvecE
+
+    else if (this%order == 2) then 
 
        !  Ascher-Ruuth-Spiteri
 
@@ -359,9 +393,9 @@ contains
 
        this%AmatI(2,1) =   41.0_pfdp              / 200.0_pfdp
        this%AmatI(2,2) =   41.0_pfdp              / 200.0_pfdp
-       this%AmatI(3,1) =   41.0_pfdp              / 100.0_pfdp
+       this%AmatI(3,1) =   41.0_pfdp              / 400.0_pfdp
        this%AmatI(3,2) = - 567603406766.0_pfdp    / 11931857230679.0_pfdp
-       this%AmatI(3,3) =   41.0_pfdp              / 100.0_pfdp
+       this%AmatI(3,3) =   41.0_pfdp              / 200.0_pfdp
        this%AmatI(4,1) =   683785636431.0_pfdp    / 9252920307686.0_pfdp
        this%AmatI(4,2) =   0.0_pfdp
        this%AmatI(4,3) = - 110385047103.0_pfdp    / 1367015193373.0_pfdp
@@ -414,7 +448,9 @@ contains
   subroutine ark_destroy(this, lev)
     class(pf_ark_t),   intent(inout) :: this
     class(pf_level_t), intent(inout) :: lev
-    
+
+    call lev%ulevel%factory%destroy_single(this%rhs, lev%index, SDC_KIND_SOL_FEVAL, lev%nvars, lev%shape)
+        
     deallocate(this%AmatE)
     deallocate(this%AmatI)
     deallocate(this%bvecE)

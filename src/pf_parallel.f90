@@ -734,12 +734,18 @@ contains
           if (pf%state%status /= PF_STATUS_CONVERGED) then
              
              fine_lev_p => pf%levels(pf%nlevels)
-             call pf_send(pf, fine_lev_p, fine_lev_p%index*10000+k, .false.)
+
+             ! with Parareal, no communication at the fine level
+             !call pf_send(pf, fine_lev_p, fine_lev_p%index*10000+k, .false.)
 
              if (pf%nlevels > 1) then
                 coarse_lev_p => pf%levels(pf%nlevels-1)
-                call restrict_time_space_fas(pf, pf%state%t0, dt, pf%nlevels)
+
+                ! with Parareal, save before the restriction
                 call save(coarse_lev_p)
+
+                call restrict_time_space_fas(pf, pf%state%t0, dt, pf%nlevels)
+
              end if
              
           end if
@@ -1117,7 +1123,10 @@ contains
     fine_lev_p => pf%levels(level_index)    
     call pf_recv(pf, fine_lev_p, fine_lev_p%index*10000+iteration, .true.)
     call fine_lev_p%ulevel%stepper%do_n_steps(pf, level_index, t0, dt, fine_lev_p%nsteps_rk)
-    call pf_send(pf, fine_lev_p, level_index*10000+iteration, .false.)
+
+    ! with Parareal, this is too early to send the new initial condition to P_np1
+    !call pf_send(pf, fine_lev_p, level_index*10000+iteration, .false.)
+
 
     !
     ! up  (coarse to fine)
@@ -1125,8 +1134,20 @@ contains
     do level_index = 2, pf%nlevels
       fine_lev_p => pf%levels(level_index);
       coarse_lev_p => pf%levels(level_index-1)
+    
       call interpolate_time_space(pf, t0, dt, level_index,coarse_lev_p%Finterp)
-      call pf_recv(pf, fine_lev_p, level_index*10000+iteration, .false.)
+
+      ! with Parareal, no communication at the fine level
+      !call pf_recv(pf, fine_lev_p, level_index*10000+iteration, .false.)
+
+      ! Parareal specifics 
+
+      ! on the fine level, set the initial condition to q0 coming from the P_nm1
+      call fine_lev_p%ulevel%interpolate(fine_lev_p, coarse_lev_p, fine_lev_p%q0, coarse_lev_p%q0, 0.0_pfdp)
+
+      ! on the coarse level, send G_old + F_new - G_new 
+      call fine_lev_p%ulevel%restrict(fine_lev_p, coarse_lev_p, fine_lev_p%Q(fine_lev_p%nnodes), coarse_lev_p%qend, 0.0_pfdp)
+      call pf_send(pf, coarse_lev_p, coarse_lev_p%index*10000+iteration, .false.)
 
        if (pf%rank /= 0) then
 

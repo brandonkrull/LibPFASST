@@ -137,7 +137,7 @@ contains
        yvec = rhsvec / (1.0_pfdp - r*dtq)
        fvec = (yvec - rhsvec) / dtq
     else if (piece == 1) then       
-       stop("Error: Piece 1 is explicit")
+       stop "Error: Piece 1 is explicit"
     else
        stop "piece not implemented"
     end if
@@ -191,7 +191,7 @@ contains
        yvec = rhsvec / (1.0_pfdp - d*dtq)
        fvec = (yvec - rhsvec) / dtq
     else 
-       stop("Error: Piece 1 is explicit")
+       stop "Error: Piece 1 is explicit"
     end if
 
   end subroutine ad_stepper_f_comp
